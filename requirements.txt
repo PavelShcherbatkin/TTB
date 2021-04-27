@@ -1,0 +1,7 @@
+python-dotenv
+asyncpg
+aiogram
+aiohttp
+aioredis
+Authlib
+requests
