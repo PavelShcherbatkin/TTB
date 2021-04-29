@@ -19,13 +19,6 @@ services:
     ports:
       - 8080:8080
 #    network_mode: "host"
-  
-  server:
-    build: server/
-    command: python ./server.py
-    restart: always
-    ports:
-      - 9090:9090
 
   tgbot:
     container_name: bot
