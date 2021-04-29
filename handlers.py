@@ -130,7 +130,7 @@ async def oauth(message: types.Message):
     if check == False:
         request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
         oauth = OAuth1Session(client_key, client_secret=client_secret)
-        oauth.redirect_uri = f'http://{host}:3000' # перенаправление на сервер
+        oauth.redirect_uri = f'http://{host}:9090' # перенаправление на сервер
         fetch_response = oauth.fetch_request_token(request_token_url)
         resource_owner_key = fetch_response.get('oauth_token')
         resource_owner_secret = fetch_response.get('oauth_token_secret')
