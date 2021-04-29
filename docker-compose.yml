@@ -25,7 +25,7 @@ services:
       image: server
       command: python server.py
       ports:
-        - 3000:3000
+        - 9090:9090
   
     tgbot:
       container_name: bot
