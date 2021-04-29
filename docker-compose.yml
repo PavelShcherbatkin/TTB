@@ -23,7 +23,7 @@ services:
     server:
       container_name: server
       image: server
-      command: python server.py
+      command: python my_server.py
       ports:
         - 9090:9090
   
