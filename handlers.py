@@ -145,10 +145,11 @@ async def oauth(message: types.Message):
 
         # Магия обработки url
         sock = socket.socket()
-        sock.bind((host, 3000))
-        sock.listen(1)
-        conn, addr = sock.accept()
-
+        sock.connect((host, 9090))
+        data = sock.recv(1024)
+        sock.close()
+        await message.answer(data)
+        """
         print('Здесь происходить обработка перенаправленного url')
         print('connected:', addr)
         data = conn.recv(4096)
@@ -158,6 +159,7 @@ async def oauth(message: types.Message):
         conn.close()
         print('connection close:')
         # конец магии
+
 
         # Парсинг url и получение токенов
         oauth.parse_authorization_response(url)
@@ -177,7 +179,7 @@ async def oauth(message: types.Message):
         await message.answer('\n'.join(text))
     else:
         await message.answer('Вы уже авторизированы')
-
+        """
 
 """/cards"""
 # Получение списка досок
