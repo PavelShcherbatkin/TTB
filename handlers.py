@@ -14,6 +14,7 @@ client_key = trello_key
 client_secret = trello_secret
 
 from load_all import bot, dp, db
+from config import host
 
 
 # Первый хендлер
@@ -129,7 +130,7 @@ async def oauth(message: types.Message):
     if check == False:
         request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
         oauth = OAuth1Session(client_key, client_secret=client_secret)
-        oauth.redirect_uri = 'http://localhost:3000' # перенаправление на сервер
+        oauth.redirect_uri = f'http://{host}:3000' # перенаправление на сервер
         fetch_response = oauth.fetch_request_token(request_token_url)
         resource_owner_key = fetch_response.get('oauth_token')
         resource_owner_secret = fetch_response.get('oauth_token_secret')
@@ -144,7 +145,7 @@ async def oauth(message: types.Message):
 
         # Магия обработки url
         sock = socket.socket()
-        sock.bind(('', 3000))
+        sock.bind((host, 3000))
         sock.listen(1)
         conn, addr = sock.accept()
 
@@ -152,7 +153,8 @@ async def oauth(message: types.Message):
         print('connected:', addr)
         data = conn.recv(4096)
         b = data.decode('utf-8').split(' ')[1]
-        url = 'http://localhost:3000' + b
+        url = f'http://{host}:3000' + b
+        conn.send('Success oauth!')
         conn.close()
         print('connection close:')
         # конец магии
