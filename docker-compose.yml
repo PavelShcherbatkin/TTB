@@ -29,5 +29,3 @@ services:
     network_mode: "host"
     env_file:
       - ".env"
-    depends_on:
-      - server
