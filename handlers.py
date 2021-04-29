@@ -130,7 +130,7 @@ async def oauth(message: types.Message):
     if check == False:
         request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
         oauth = OAuth1Session(client_key, client_secret=client_secret)
-        oauth.redirect_uri = f'http://{host}:9090' # перенаправление на сервер
+        oauth.redirect_uri = 'http://84.252.140.135:9090' # перенаправление на сервер
         fetch_response = oauth.fetch_request_token(request_token_url)
         resource_owner_key = fetch_response.get('oauth_token')
         resource_owner_secret = fetch_response.get('oauth_token_secret')
@@ -145,17 +145,15 @@ async def oauth(message: types.Message):
 
         # Магия обработки url
         sock = socket.socket()
-        sock.connect((host, 9090))
-        data = sock.recv(1024)
-        sock.close()
-        await message.answer(data)
-        """
+        sock.bind(('84.252.140.135', 9090))
+        sock.listen(1)
+        conn, addr = sock.accept()
+
         print('Здесь происходить обработка перенаправленного url')
         print('connected:', addr)
         data = conn.recv(4096)
         b = data.decode('utf-8').split(' ')[1]
-        url = f'http://{host}:3000' + b
-        conn.send('Success oauth!')
+        url = f'http://84.252.140.135:9090' + b
         conn.close()
         print('connection close:')
         # конец магии
@@ -179,7 +177,7 @@ async def oauth(message: types.Message):
         await message.answer('\n'.join(text))
     else:
         await message.answer('Вы уже авторизированы')
-        """
+
 
 """/cards"""
 # Получение списка досок
