@@ -8,6 +8,7 @@ from asyncpg import Connection, Record
 from asyncpg.exceptions import UniqueViolationError
 from config import trello_key, trello_secret
 from aiogramcalendar import calendar_callback, create_calendar, process_calendar_selection
+from states.date import Date
 import socket
 
 client_key = trello_key
@@ -128,33 +129,58 @@ async def bot_help(message: types.Message):
 async def oauth(message: types.Message):
     check = await db.check_user()
     if check == False:
+
         request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
         oauth = OAuth1Session(client_key, client_secret=client_secret)
-        oauth.redirect_uri = f'http://{host}:9090' # перенаправление на сервер
+        oauth.redirect_uri = f'http://localhost:9091' # перенаправление на сервер
         fetch_response = oauth.fetch_request_token(request_token_url)
         resource_owner_key = fetch_response.get('oauth_token')
         resource_owner_secret = fetch_response.get('oauth_token_secret')
         base_authorization_url = 'https://trello.com/1/OAuthAuthorizeToken'
-        authorization_url = oauth.create_authorization_url(base_authorization_url, expiration='never', scope='read,write')
+        authorization_url = oauth.create_authorization_url(
+            base_authorization_url,
+            expiration='never',
+            scope='read,write',
+            name='PavelShcherbatkin'
+        )
         #print(authorization_url)
-
         
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton(text="Login with Oauth", url=authorization_url))
         await message.answer("Продите процедуру авторизации", reply_markup=keyboard)
-
-        # Магия обработки url
-        sock = socket.socket()
-        sock.connect((host, 9090))
-
-        data = sock.recv(1024)
-        print('Сервер прислал', data)
-        sock.close()
-        # конец магии
-        await message.answer(data)
+        await Date.D5.set()
+        
+        @dp.message_handler(state=Date.D5)
+        async def add_task(message: types.Message, state: FSMContext):
+            redirect_url = message.text
+            await state.finish()
+            oauth.parse_authorization_response(redirect_url)
+            access_token_url = 'https://trello.com/1/OAuthGetAccessToken'
+            token = oauth.fetch_access_token(access_token_url)
+            print('Получаем наши любименькие токены :)')
+            print(token)
+            #save_access_token(token)
+            oauth_token = token['oauth_token']
+            oauth_token_secret = token['oauth_token_secret']
+            await db.reg(oauth_token, oauth_token_secret)
+            text = [
+                'Авторизация прошла успешно',
+                'Для получения справки введите /help'
+                ]
+            await message.answer('\n'.join(text))
+            
+        '''
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((host, 9090))
+            sock.listen(1)
+            data = sock.recv(4096)
+            b = data.decode('utf-8')
+            
+        await message.answer(b)
+        await message.answer('Отправил данные')
+        
         """
-        # Парсинг url и получение токенов
-        oauth.parse_authorization_response(url)
+        oauth.parse_authorization_response(redirect_url)
         access_token_url = 'https://trello.com/1/OAuthGetAccessToken'
         token = oauth.fetch_access_token(access_token_url)
         print('Получаем наши любименькие токены :)')
@@ -162,14 +188,14 @@ async def oauth(message: types.Message):
         #save_access_token(token)
         oauth_token = token['oauth_token']
         oauth_token_secret = token['oauth_token_secret']
-        await db.oauth(oauth_token, oauth_token_secret)
-        #balance = await database.check_money()
+        await db.reg(oauth_token, oauth_token_secret)
         text = [
             'Авторизация прошла успешно',
             'Для получения справки введите /help'
             ]
         await message.answer('\n'.join(text))
         """
+        '''
     else:
         await message.answer('Вы уже авторизированы')
 
