@@ -147,7 +147,7 @@ async def oauth(message: types.Message):
         
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton(text="Login with Oauth", url=authorization_url))
-        await message.answer("Продите процедуру авторизации", reply_markup=keyboard)
+        await message.answer("Продите процедуру авторизации, после чего введите полученный url", reply_markup=keyboard)
         await Date.D5.set()
         
         @dp.message_handler(state=Date.D5)
@@ -162,7 +162,7 @@ async def oauth(message: types.Message):
             #save_access_token(token)
             oauth_token = token['oauth_token']
             oauth_token_secret = token['oauth_token_secret']
-            await db.reg(oauth_token, oauth_token_secret)
+            await db.oauth(oauth_token, oauth_token_secret)
             text = [
                 'Авторизация прошла успешно',
                 'Для получения справки введите /help'
