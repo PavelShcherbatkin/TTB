@@ -54,7 +54,7 @@ class DBCommands:
         result = None
         args = (my_id,)
         try:
-            result = self.pool.fetchval(command, *args)
+            result = await self.pool.fetchval(command, *args)
         except:
             print('Возникла ошибка в check_user')
         if result:
@@ -68,7 +68,7 @@ class DBCommands:
         my_id = int(user.id)
         first_name = user.first_name
         second_name = user.last_name
-        args = my_id, first_name, second_name
+        args = (my_id, first_name, second_name)
         try:
             record_id = await self.pool.fetchval(command, *args)
             return record_id
@@ -82,7 +82,7 @@ class DBCommands:
         result = None
         args = (my_id,)
         try:
-            result = self.pool.fetchval(command, *args)
+            result = await self.pool.fetchval(command, *args)
         except:
             print('Возникла ошибка в check_user')
         if result:
