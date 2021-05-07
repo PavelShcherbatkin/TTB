@@ -1,6 +1,6 @@
 create table if not exists users
 (
-    my_id bigint not null primary key,
+    my_id int not null primary key,
     first_name text,
     second_name text,
     oauth_token text, 

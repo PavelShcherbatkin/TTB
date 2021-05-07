@@ -11,6 +11,11 @@ from aiogramcalendar import calendar_callback, create_calendar, process_calendar
 from states.date import Date
 import socket
 
+# Кнопки
+from aiogram.types import ReplyKeyboardRemove, \
+    ReplyKeyboardMarkup, KeyboardButton, \
+    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+    
 client_key = trello_key
 client_secret = trello_secret
 
@@ -45,8 +50,11 @@ member_id = None
 
 
 class DBCommands:
-    CHECK_OAUTH_USER = "SELECT oauth_token, oauth_token_secret FROM users WHERE my_id=?"
-    ADD_NEW_USER = 'INSERT INTO users (my_id, first_name, second_name, oauth_token, oauth_token_secret) values(?, ?, ?, ?, ?) RETURNING my_id'
+    pool: Connection = db
+    CHECK_OAUTH_USER = "SELECT oauth_token, oauth_token_secret FROM users WHERE my_id=$1"
+    GET_TOKEN = "SELECT oauth_token FROM users WHERE my_id=$1"
+    GET_SECRET = "SELECT oauth_token_secret FROM users WHERE my_id=$1"
+    ADD_NEW_USER = 'INSERT INTO users (my_id, first_name, second_name, oauth_token, oauth_token_secret) values($1, $2, $3, $4, $5) RETURNING my_id'
     async def check_user(self):
         command = self.CHECK_OAUTH_USER
         user = types.User.get_current()
@@ -68,7 +76,7 @@ class DBCommands:
         my_id = int(user.id)
         first_name = user.first_name
         second_name = user.last_name
-        args = (my_id, first_name, second_name)
+        args = (my_id, first_name, second_name, oauth_token, oauth_token_secret)
         try:
             record_id = await self.pool.fetchval(command, *args)
             return record_id
@@ -76,13 +84,16 @@ class DBCommands:
             pass
     
     async def access(self):
-        command = self.CHECK_OAUTH_USER
+        command_1 = self.GET_TOKEN
+        command_2 = self.GET_SECRET
         user = types.User.get_current()
         my_id = int(user.id)
         result = None
         args = (my_id,)
         try:
-            result = await self.pool.fetchval(command, *args)
+            result_1 = await self.pool.fetchval(command_1, *args)
+            result_2 = await self.pool.fetchval(command_2, *args)
+            result = (result_1, result_2)
         except:
             print('Возникла ошибка в check_user')
         if result:
@@ -129,7 +140,6 @@ async def bot_help(message: types.Message):
 async def oauth(message: types.Message):
     check = await db.check_user()
     if check == False:
-
         request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
         oauth = OAuth1Session(client_key, client_secret=client_secret)
         oauth.redirect_uri = f'http://localhost:9091' # перенаправление на сервер
@@ -141,10 +151,8 @@ async def oauth(message: types.Message):
             base_authorization_url,
             expiration='never',
             scope='read,write',
-            name='PavelShcherbatkin'
+            name='TASKai'
         )
-        #print(authorization_url)
-        
         keyboard = types.InlineKeyboardMarkup()
         keyboard.add(types.InlineKeyboardButton(text="Login with Oauth", url=authorization_url))
         await message.answer("Продите процедуру авторизации, после чего введите полученный url", reply_markup=keyboard)
@@ -168,34 +176,6 @@ async def oauth(message: types.Message):
                 'Для получения справки введите /help'
                 ]
             await message.answer('\n'.join(text))
-            
-        '''
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((host, 9090))
-            sock.listen(1)
-            data = sock.recv(4096)
-            b = data.decode('utf-8')
-            
-        await message.answer(b)
-        await message.answer('Отправил данные')
-        
-        """
-        oauth.parse_authorization_response(redirect_url)
-        access_token_url = 'https://trello.com/1/OAuthGetAccessToken'
-        token = oauth.fetch_access_token(access_token_url)
-        print('Получаем наши любименькие токены :)')
-        print(token)
-        #save_access_token(token)
-        oauth_token = token['oauth_token']
-        oauth_token_secret = token['oauth_token_secret']
-        await db.reg(oauth_token, oauth_token_secret)
-        text = [
-            'Авторизация прошла успешно',
-            'Для получения справки введите /help'
-            ]
-        await message.answer('\n'.join(text))
-        """
-        '''
     else:
         await message.answer('Вы уже авторизированы')
 
@@ -210,7 +190,9 @@ async def oauth(message: types.Message):
         global oauth_id
         global boards
         global boards_dict
-        oauth_token, oauth_token_secret = await db.access()
+        result = await db.access()
+        oauth_token = result[0]
+        oauth_token_secret = result[1]
         oauth = OAuth1Session(
             client_key,
             client_secret,
@@ -228,7 +210,7 @@ async def oauth(message: types.Message):
         for board_id in boards_dict.keys():
             bt_board = types.InlineKeyboardButton(boards_dict[board_id], callback_data=board_id)
             boards_keyboard.add(bt_board)
-        await message.answer("Выберите доску:", reply_markup=boards_keyboard)
+        await message.answer("Выберите доску:", reply_markup=boards_keyboard) 
     else:
         await message.answer('Для получения полного функционала вам необходимо авторизоваться /oauth')
 
@@ -252,7 +234,7 @@ async def process_callback(call: types.CallbackQuery):
     for list_id in lists_dict.keys():
         bt_list = types.InlineKeyboardButton(lists_dict[list_id], callback_data=list_id)
         lists_keyboard.add(bt_list)
-    await dp.bot.send_message(call.from_user.id, "Выберите список:", reply_markup=lists_keyboard)
+    await dp.bot.send_message(call.message.chat.id, "Выберите список:", reply_markup=lists_keyboard)
 
 
 # Получение action (тыкнули на какой-то список)
@@ -263,17 +245,17 @@ async def process_callback(call: types.CallbackQuery):
     await dp.bot.answer_callback_query(call.id)
     list_id = call.data
     list_name = lists_dict[list_id]
-    kb_action_1 = InlineKeyboardButton('Посмотреть текущие задачи', callback_data='read')
-    kb_action_2 = InlineKeyboardButton('Переместить карточку', callback_data='cd')
-    kb_action_3 = InlineKeyboardButton('Загрузить новую задачу', callback_data='write')
-    kb_action_4 = InlineKeyboardButton('Удалить карточку', callback_data='del')
-    action_keyboard = InlineKeyboardMarkup()
+    kb_action_1 = types.InlineKeyboardButton('Посмотреть текущие задачи', callback_data='read')
+    kb_action_2 = types.InlineKeyboardButton('Переместить карточку', callback_data='cd')
+    kb_action_3 = types.InlineKeyboardButton('Загрузить новую задачу', callback_data='write')
+    kb_action_4 = types.InlineKeyboardButton('Удалить карточку', callback_data='del')
+    action_keyboard = types.InlineKeyboardMarkup()
     action_keyboard.add(kb_action_1)
     action_keyboard.add(kb_action_2)
     action_keyboard.add(kb_action_3)
     action_keyboard.add(kb_action_4)
 
-    await dp.bot.send_message(call.from_user.id, "Что вы хотите сделать?", reply_markup=action_keyboard)
+    await dp.bot.send_message(call.message.chat.id, "Что вы хотите сделать?", reply_markup=action_keyboard)
 
 
 # (тыкнули на read)
@@ -288,7 +270,7 @@ async def process_callback(call: types.CallbackQuery):
     for card in cards:
         text_cards.append(card['name'])
     text = f'{text_cards[0]}\n' + ';\n'.join(text_cards[1:]) + '.'
-    await dp.bot.send_message(call.from_user.id, text)
+    await dp.bot.send_message(call.message.chat.id, text)
 
 
 # (тыкнули на cd)
@@ -314,7 +296,7 @@ async def process_callback(call: types.CallbackQuery):
         f'Ваши карточки на доске "{board_name}" в списке "{list_name}":',
         'Выберите карточку которую хотите переместить'
         ]
-    await dp.bot.send_message(call.from_user.id, '\n'.join(text), reply_markup=keyboard_cards)
+    await dp.bot.send_message(call.message.chat.id, '\n'.join(text), reply_markup=keyboard_cards)
 
 
     @dp.callback_query_handler(lambda c: c.data in map(str, d.keys()))
@@ -327,7 +309,7 @@ async def process_callback(call: types.CallbackQuery):
         for name in lists_dict.values():
             bt_list = types.InlineKeyboardButton(name, callback_data=name)
             lists_keyboard.add(bt_list)
-        await dp.bot.send_message(call.from_user.id, "Выберите список куда переместить карточку:", reply_markup=lists_keyboard)
+        await dp.bot.send_message(call.message.chat.id, "Выберите список куда переместить карточку:", reply_markup=lists_keyboard)
         
 
     @dp.callback_query_handler(lambda c: c.data in lists_dict.values())
@@ -345,7 +327,7 @@ async def process_callback(call: types.CallbackQuery):
                     'idList': list_id,
                 }
         cd = oauth.put(cd_url, data=query)
-        await dp.bot.send_message(call.from_user.id, f"Карточка перемещена")
+        await dp.bot.send_message(call.message.chat.id, f"Карточка перемещена")
 
 
 # (тыкнули на del)
@@ -366,7 +348,7 @@ async def process_callback(call: types.CallbackQuery):
         f'Ваши карточки на доске "{board_name}" в списке "{list_name}":',
         'Выберите карточку которую хотите удалить'
         ]
-    await dp.bot.send_message(call.from_user.id, '\n'.join(text), reply_markup=keyboard_cards)
+    await dp.bot.send_message(call.message.chat.id, '\n'.join(text), reply_markup=keyboard_cards)
 
     
     @dp.callback_query_handler(lambda c: c.data in cards_dict.keys())
@@ -376,14 +358,14 @@ async def process_callback(call: types.CallbackQuery):
         card_id = call.data
         del_url = f'https://api.trello.com/1/cards/{card_id}'
         oauth.delete(del_url)
-        await dp.bot.send_message(call.from_user.id, 'Карточка удалена')
+        await dp.bot.send_message(call.message.chat.id, 'Карточка удалена')
         card_id = None
 
 
 @dp.callback_query_handler(lambda c: c.data == 'write')
 async def process_callback(call: types.CallbackQuery):
     await dp.bot.answer_callback_query(call.id)
-    await dp.bot.send_message(call.from_user.id, 'Введите имя задачи')
+    await dp.bot.send_message(call.message.chat.id, 'Напишите: /cards "Имя задачи"')
     await Date.D1.set()
 
 
@@ -410,12 +392,12 @@ async def process_callback(call: types.CallbackQuery):
         bt = KeyboardButton('Подтвердить')
         keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         keyboard.add(bt)
-        await dp.bot.send_message(call.from_user.id, 'Подтвердите данное действие', reply_markup=keyboard)
+        await dp.bot.send_message(call.message.chat.id, 'Подтвердите данное действие', reply_markup=keyboard)
 
 
     @dp.callback_query_handler(lambda c: c.data == 'date_yes')
     async def process_callback(call: types.CallbackQuery):
-        await dp.bot.send_message(call.from_user.id, "Пожалуйста, выберите дату: ", reply_markup=create_calendar())
+        await dp.bot.send_message(call.message.chat.id, "Пожалуйста, выберите дату: ", reply_markup=create_calendar())
 
 
     @dp.callback_query_handler(calendar_callback.filter()) 
@@ -424,7 +406,7 @@ async def process_callback(call: types.CallbackQuery):
         selected, date = await process_calendar_selection(call, callback_data)
         if selected:
             await dp.bot.answer_callback_query(call.id)
-            await dp.bot.send_message(call.from_user.id, 'Введите время в формате hour:minut:second')
+            await dp.bot.send_message(call.message.chat.id, 'Введите время в формате "/cards hour:minut:second"')
             await Date.D2.set()
 
 
@@ -454,7 +436,7 @@ async def process_callback(call: types.CallbackQuery):
         bt_member_confirm = KeyboardButton('Подтвердить')
         keyboard_confirm = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         keyboard_confirm.add(bt_member_confirm)
-        await dp.bot.send_message(call.from_user.id, 'Подтвердите данное действие', reply_markup=keyboard_confirm)
+        await dp.bot.send_message(call.message.chat.id, 'Подтвердите данное действие', reply_markup=keyboard_confirm)
         await Date.D3.set()
 
 
@@ -472,7 +454,7 @@ async def process_callback(call: types.CallbackQuery):
         for name in memberships_name_list:
             bt_member = InlineKeyboardButton(name, callback_data=name)
             memberships_keyboard.add(bt_member)
-        await dp.bot.send_message(call.from_user.id, 'Выберите исполнителя', reply_markup=memberships_keyboard)
+        await dp.bot.send_message(call.message.chat.id, 'Выберите исполнителя', reply_markup=memberships_keyboard)
 
 
         @dp.callback_query_handler(lambda c: c.data in memberships_name_list)
@@ -493,7 +475,7 @@ async def process_callback(call: types.CallbackQuery):
             bt_member_yes_confirm = KeyboardButton('Да')
             keyboard_yes_confirm = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             keyboard_yes_confirm.add(bt_member_yes_confirm)
-            await dp.bot.send_message(call.from_user.id, 'Подтвердите данное действие', reply_markup=keyboard_yes_confirm)
+            await dp.bot.send_message(call.message.chat.id, 'Подтвердите данное действие', reply_markup=keyboard_yes_confirm)
             await Date.D3.set()
 
 
