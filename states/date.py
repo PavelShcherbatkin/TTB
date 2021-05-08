@@ -6,3 +6,4 @@ class Date(StatesGroup):
     D3 = State()
     D4 = State()
     D5 = State()
+    finish = State()

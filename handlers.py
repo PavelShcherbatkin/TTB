@@ -1,5 +1,4 @@
 from authlib.integrations.requests_client import OAuth1Session
-
 from aiogram import types
 from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.filters.builtin import CommandStart, CommandHelp
@@ -10,17 +9,15 @@ from config import trello_key, trello_secret
 from aiogramcalendar import calendar_callback, create_calendar, process_calendar_selection
 from states.date import Date
 import socket
-
-# Кнопки
+import re
+from load_all import bot, dp, db
 from aiogram.types import ReplyKeyboardRemove, \
     ReplyKeyboardMarkup, KeyboardButton, \
     InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
     
 client_key = trello_key
 client_secret = trello_secret
-
-from load_all import bot, dp, db
-host = '84.252.140.135'
+HOST = '84.201.165.21'
 
 
 # Первый хендлер
@@ -138,46 +135,43 @@ async def bot_help(message: types.Message):
 
 @dp.message_handler(Command('oauth'))
 async def oauth(message: types.Message):
+    id_user = message.from_user.id
+    id_chat = message.chat.id
     check = await db.check_user()
     if check == False:
-        request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
-        oauth = OAuth1Session(client_key, client_secret=client_secret)
-        oauth.redirect_uri = f'http://localhost:9091' # перенаправление на сервер
-        fetch_response = oauth.fetch_request_token(request_token_url)
-        resource_owner_key = fetch_response.get('oauth_token')
-        resource_owner_secret = fetch_response.get('oauth_token_secret')
-        base_authorization_url = 'https://trello.com/1/OAuthAuthorizeToken'
-        authorization_url = oauth.create_authorization_url(
-            base_authorization_url,
-            expiration='never',
-            scope='read,write',
-            name='TASKai'
-        )
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(types.InlineKeyboardButton(text="Login with Oauth", url=authorization_url))
-        await message.answer("Продите процедуру авторизации, после чего введите полученный url", reply_markup=keyboard)
-        await Date.D5.set()
-        
-        @dp.message_handler(state=Date.D5)
-        async def add_task(message: types.Message, state: FSMContext):
-            redirect_url = message.text
-            await state.finish()
-            oauth.parse_authorization_response(redirect_url)
-            access_token_url = 'https://trello.com/1/OAuthGetAccessToken'
-            token = oauth.fetch_access_token(access_token_url)
-            print('Получаем наши любименькие токены :)')
-            print(token)
-            #save_access_token(token)
-            oauth_token = token['oauth_token']
-            oauth_token_secret = token['oauth_token_secret']
-            await db.oauth(oauth_token, oauth_token_secret)
-            text = [
-                'Авторизация прошла успешно',
-                'Для получения справки введите /help'
-                ]
-            await message.answer('\n'.join(text))
+        if id_user != id_chat:
+            await dp.bot.send_message(message.from_user.id, 'Нажмите /oauth')
+        else:
+            request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
+            oauth = OAuth1Session(client_key, client_secret=client_secret)
+            oauth.redirect_uri = f'http://{HOST}:9090' # перенаправление на сервер
+            fetch_response = oauth.fetch_request_token(request_token_url)
+            resource_owner_key = fetch_response.get('oauth_token')
+            resource_owner_secret = fetch_response.get('oauth_token_secret')
+            base_authorization_url = 'https://trello.com/1/OAuthAuthorizeToken'
+            authorization_url = oauth.create_authorization_url(base_authorization_url, expiration='never', scope='read,write')
+            keyboard = types.InlineKeyboardMarkup()
+            keyboard.add(types.InlineKeyboardButton(text="Login with Oauth", url=authorization_url))
+            await message.answer("Продите процедуру авторизации, после чего введите полученный url", reply_markup=keyboard)
+            await Date.D5.set()
+            
+            @dp.message_handler(state=Date.D5)
+            async def add_task(message: types.Message, state: FSMContext):
+                redirect_url = message.text
+                await state.finish()
+                oauth.parse_authorization_response(redirect_url)
+                access_token_url = 'https://trello.com/1/OAuthGetAccessToken'
+                token = oauth.fetch_access_token(access_token_url)
+                oauth_token = token['oauth_token']
+                oauth_token_secret = token['oauth_token_secret']
+                await db.oauth(oauth_token, oauth_token_secret)
+                text = [
+                    'Авторизация прошла успешно',
+                    'Для получения справки введите /help'
+                    ]
+                await message.answer('\n'.join(text))
     else:
-        await message.answer('Вы уже авторизированы')
+        await dp.bot.send_message(message.from_user.id, 'Вы уже авторизированы')
 
 
 """/bot"""
@@ -478,36 +472,7 @@ async def process_callback(call: types.CallbackQuery):
             await dp.bot.send_message(call.message.chat.id, 'Подтвердите данное действие', reply_markup=keyboard_yes_confirm)
             await Date.D3.set()
 
-    """
-    @dp.message_handler(state=Date.D3)
-    async def add_task(message: types.Message, state: FSMContext):
-        global list_id
-        global task
-        global date
-        global member_id
 
-        url_cards = f'https://api.trello.com/1/cards'
-        confirm = message.text
-        if confirm != 'Подтвердить':
-            query = {
-                    'idList': list_id,
-                    'name': task,
-                    'due': date,
-                    'idMembers': member_id
-                }
-        else:
-            query = {
-                    'idList': list_id,
-                    'name': task,
-                    'due': date
-                }   
-        cards = oauth.post(url_cards, data=query)
-        await message.answer(f'Карточка "{task}" добавлена')
-        task = None
-        date = None
-        member_id = None
-        await state.finish()
-    """
     @dp.message_handler(state=Date.D3)
     async def add_task(message: types.Message, state: FSMContext):
         text = str(f'Вы действительно хотите создать карточку {task}?\n')
