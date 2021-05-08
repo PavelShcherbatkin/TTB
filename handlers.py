@@ -126,7 +126,7 @@ async def bot_help(message: types.Message):
     if user_in_db:
         text = [
             'Список команд: ',
-            '/cards - Работа с карточками',
+            '/bot - Работа с карточками',
             '/help - Получить справку'
         ]
     else:
@@ -180,19 +180,18 @@ async def oauth(message: types.Message):
         await message.answer('Вы уже авторизированы')
 
 
-"""/cards"""
+"""/bot"""
 # Получение списка досок
-@dp.message_handler(Command('cards'))
+@dp.message_handler(lambda message: re.search('задач', message.text.lower()) or re.search('делай', message.text.lower()) or re.search('надо', message.text.lower()) or re.search('бот', message.text.lower()))
+@dp.message_handler(Command('bot'))
 async def oauth(message: types.Message):
-    user_in_db = await db.check_user()
+    user_in_db = await db.access()
     if user_in_db:
         global oauth
         global oauth_id
         global boards
         global boards_dict
-        result = await db.access()
-        oauth_token = result[0]
-        oauth_token_secret = result[1]
+        oauth_token, oauth_token_secret = await db.access()
         oauth = OAuth1Session(
             client_key,
             client_secret,
@@ -210,7 +209,7 @@ async def oauth(message: types.Message):
         for board_id in boards_dict.keys():
             bt_board = types.InlineKeyboardButton(boards_dict[board_id], callback_data=board_id)
             boards_keyboard.add(bt_board)
-        await message.answer("Выберите доску:", reply_markup=boards_keyboard) 
+        await message.answer("Выберите доску:", reply_markup=boards_keyboard)
     else:
         await message.answer('Для получения полного функционала вам необходимо авторизоваться /oauth')
 
@@ -245,11 +244,11 @@ async def process_callback(call: types.CallbackQuery):
     await dp.bot.answer_callback_query(call.id)
     list_id = call.data
     list_name = lists_dict[list_id]
-    kb_action_1 = types.InlineKeyboardButton('Посмотреть текущие задачи', callback_data='read')
-    kb_action_2 = types.InlineKeyboardButton('Переместить карточку', callback_data='cd')
-    kb_action_3 = types.InlineKeyboardButton('Загрузить новую задачу', callback_data='write')
-    kb_action_4 = types.InlineKeyboardButton('Удалить карточку', callback_data='del')
-    action_keyboard = types.InlineKeyboardMarkup()
+    kb_action_1 = InlineKeyboardButton('Посмотреть текущие задачи', callback_data='read')
+    kb_action_2 = InlineKeyboardButton('Переместить карточку', callback_data='cd')
+    kb_action_3 = InlineKeyboardButton('Загрузить новую задачу', callback_data='write')
+    kb_action_4 = InlineKeyboardButton('Удалить карточку', callback_data='del')
+    action_keyboard = InlineKeyboardMarkup()
     action_keyboard.add(kb_action_1)
     action_keyboard.add(kb_action_2)
     action_keyboard.add(kb_action_3)
@@ -365,7 +364,7 @@ async def process_callback(call: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data == 'write')
 async def process_callback(call: types.CallbackQuery):
     await dp.bot.answer_callback_query(call.id)
-    await dp.bot.send_message(call.message.chat.id, 'Напишите: /cards "Имя задачи"')
+    await dp.bot.send_message(call.message.chat.id, 'Напишите: /bot "Имя задачи"')
     await Date.D1.set()
 
 
@@ -373,7 +372,7 @@ async def process_callback(call: types.CallbackQuery):
     @dp.message_handler(state=Date.D1)
     async def process_callback(message: types.Message, state: FSMContext):
         global task
-        task = message.text
+        task = ' '.join(message.text.split(' ')[1:])
         await state.finish()
         kb_date_yes = InlineKeyboardButton('Установить дату', callback_data='date_yes')
         kb_date_no = InlineKeyboardButton('Не ставить дату', callback_data='date_no')
@@ -406,7 +405,7 @@ async def process_callback(call: types.CallbackQuery):
         selected, date = await process_calendar_selection(call, callback_data)
         if selected:
             await dp.bot.answer_callback_query(call.id)
-            await dp.bot.send_message(call.message.chat.id, 'Введите время в формате "/cards hour:minut:second"')
+            await dp.bot.send_message(call.message.chat.id, 'Введите время в формате "/bot hour:minut:second"')
             await Date.D2.set()
 
 
@@ -415,6 +414,7 @@ async def process_callback(call: types.CallbackQuery):
         global date
         time = message.text
         if time != 'Подтвердить':
+            time = ' '.join(message.text.split(' ')[1:])
             date = date.strftime("%Y-%m-%d") + ' ' + time
         else:
             pass
@@ -478,7 +478,7 @@ async def process_callback(call: types.CallbackQuery):
             await dp.bot.send_message(call.message.chat.id, 'Подтвердите данное действие', reply_markup=keyboard_yes_confirm)
             await Date.D3.set()
 
-
+    """
     @dp.message_handler(state=Date.D3)
     async def add_task(message: types.Message, state: FSMContext):
         global list_id
@@ -507,3 +507,42 @@ async def process_callback(call: types.CallbackQuery):
         date = None
         member_id = None
         await state.finish()
+    """
+    @dp.message_handler(state=Date.D3)
+    async def add_task(message: types.Message, state: FSMContext):
+        text = str(f'Вы действительно хотите создать карточку {task}?\n')
+        if date:
+            text += str(f'Время: {date}\n')
+        if member_id:
+            text += str(f'Исполнитель: {name_member}')
+        bt_finish_yes = KeyboardButton('Создать карточку')
+        bt_finish_no = KeyboardButton('Не создавать карточку')
+        keyboard_finish = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        keyboard_finish.add(bt_finish_yes, bt_finish_no)
+        await Date.finish.set()
+        await message.answer(text, reply_markup=keyboard_finish)
+
+    @dp.message_handler(state=Date.finish)
+    async def add_task(message: types.Message, state: FSMContext):
+        global list_id
+        global task
+        global date
+        global member_id
+
+        url_cards = f'https://api.trello.com/1/cards'
+        confirm = message.text
+        if confirm == 'Создать карточку':
+            query = {
+                    'idList': list_id,
+                    'name': task,
+                    'due': date,
+                    'idMembers': member_id
+                }
+            cards = oauth.post(url_cards, data=query)
+            await message.answer(f'Карточка "{task}" добавлена')
+        elif confirm == 'Не создавать карточку':
+            await message.answer(f'Карточка "{task}" не будет добавлена')
+        await state.finish()
+        task = None
+        date = None
+        member_id = None
