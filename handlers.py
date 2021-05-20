@@ -135,16 +135,21 @@ async def bot_help(message: types.Message):
 
 @dp.message_handler(Command('oauth'))
 async def oauth(message: types.Message):
+    global oauth
+    #global resource_owner_key
+    #global resource_owner_secret
     id_user = message.from_user.id
     id_chat = message.chat.id
     check = await db.check_user()
     if check == False:
         if id_user != id_chat:
-            await dp.bot.send_message(message.from_user.id, 'Нажмите /oauth')
+            bot_keyboard = types.InlineKeyboardMarkup()
+            bot_keyboard.add(types.InlineKeyboardButton(text="Start dialog with bot", url='https://t.me/Shcherbatkin_Bot'))
+            await message.answer("Начните диалог с ботом", reply_markup=bot_keyboard)
         else:
             request_token_url = 'https://trello.com/1/OAuthGetRequestToken'
             oauth = OAuth1Session(client_key, client_secret=client_secret)
-            oauth.redirect_uri = f'http://{HOST}:9090' # перенаправление на сервер
+            oauth.redirect_uri = f'http://84.201.165.21:9090' # перенаправление на сервер
             fetch_response = oauth.fetch_request_token(request_token_url)
             resource_owner_key = fetch_response.get('oauth_token')
             resource_owner_secret = fetch_response.get('oauth_token_secret')
@@ -157,6 +162,7 @@ async def oauth(message: types.Message):
             
             @dp.message_handler(state=Date.D5)
             async def add_task(message: types.Message, state: FSMContext):
+                global oauth
                 redirect_url = message.text
                 await state.finish()
                 oauth.parse_authorization_response(redirect_url)
@@ -169,7 +175,7 @@ async def oauth(message: types.Message):
                     'Авторизация прошла успешно',
                     'Для получения справки введите /help'
                     ]
-                await message.answer('\n'.join(text))
+                await message.answer('\n'.join(text))    
     else:
         await dp.bot.send_message(message.from_user.id, 'Вы уже авторизированы')
 
